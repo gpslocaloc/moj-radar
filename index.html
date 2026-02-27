@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radar Detektor</title>
+    <style>
+        body { font-family: sans-serif; background: #1a1a1a; color: white; text-align: center; padding: 20px; }
+        .status { padding: 20px; border-radius: 10px; margin-bottom: 20px; font-size: 1.2rem; }
+        .safe { background: #2ecc71; }
+        .danger { background: #e74c3c; animation: blink 0.5s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        textarea { width: 100%; height: 100px; background: #333; color: #fff; border: 1px solid #555; border-radius: 5px; }
+        button { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 10px 0; }
+        .camera-list { text-align: left; background: #222; padding: 10px; border-radius: 5px; max-height: 200px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+
+    <h1>Radar Detektor 🛰️</h1>
+    
+    <div id="statusBox" class="status safe">Traženje lokacije...</div>
+    <div id="distanceInfo">Približavanje: - m</div>
+
+    <hr>
+
+    <h3>Dodaj Kamere (Format: Zemlja, Grad, Tip, Lat, Lon)</h3>
+    <p style="font-size: 0.8rem; color: #aaa;">Primer: Srbija, Beograd, Brzina, 44.8125, 20.4612</p>
+    <textarea id="cameraInput" placeholder="Srbija, Beograd, Brzina, 44.8125, 20.4612"></textarea>
+    <button onclick="addCameras()">Ažuriraj Spisak</button>
+
+    <h3>Moje Kamere (<span id="camCount">0</span>)</h3>
+    <div class="camera-list" id="cameraList"></div>
+
+    <script>
+        let cameras = JSON.parse(localStorage.getItem('cameras')) || [];
+        let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Funkcija za zvuk pištanja
+        function beep(freq = 440, duration = 200) {
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = freq;
+            osc.start();
+            setTimeout(() => osc.stop(), duration);
+        }
+
+        function updateCameraDisplay() {
+            const list = document.getElementById('cameraList');
+            const count = document.getElementById('camCount');
+            list.innerHTML = cameras.map((c, i) => `<div>${i+1}. ${c.country} - ${c.city} (${c.type})</div>`).join('');
+            count.innerText = cameras.length;
+            localStorage.setItem('cameras', JSON.stringify(cameras));
+        }
+
+        function addCameras() {
+            const input = document.getElementById('cameraInput').value;
+            const lines = input.split('\n');
+            lines.forEach(line => {
+                const parts = line.split(',');
+                if(parts.length === 5) {
+                    cameras.push({
+                        country: parts[0].trim(),
+                        city: parts[1].trim(),
+                        type: parts[2].trim(),
+                        lat: parseFloat(parts[3].trim()),
+                        lon: parseFloat(parts[4].trim())
+                    });
+                }
+            });
+            updateCameraDisplay();
+            document.getElementById('cameraInput').value = '';
+            alert('Kamere uspešno dodate!');
+        }
+
+        // Haversine formula za distancu
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Radijus zemlje u metrima
+            const p1 = lat1 * Math.PI/180;
+            const p2 = lat2 * Math.PI/180;
+            const dp = (lat2-lat1) * Math.PI/180;
+            const dl = (lon2-lon1) * Math.PI/180;
+            const a = Math.sin(dp/2) * Math.sin(dp/2) +
+                      Math.cos(p1) * Math.cos(p2) *
+                      Math.sin(dl/2) * Math.sin(dl/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function watchLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(position => {
+                    const myLat = position.coords.latitude;
+                    const myLon = position.coords.longitude;
+                    let closestDist = Infinity;
+                    let danger = false;
+
+                    cameras.forEach(cam => {
+                        const dist = getDistance(myLat, myLon, cam.lat, cam.lon);
+                        if (dist < closestDist) closestDist = dist;
+                        if (dist < 500) danger = true; // Alarm na 500 metara
+                    });
+
+                    const statusBox = document.getElementById('statusBox');
+                    const distInfo = document.getElementById('distanceInfo');
+
+                    if (danger) {
+                        statusBox.innerText = "⚠️ RADAR BLIZU!";
+                        statusBox.className = "status danger";
+                        distInfo.innerText = `Udaljenost: ${Math.round(closestDist)}m`;
+                        beep(880, 500); // Visok ton
+                    } else {
+                        statusBox.innerText = "Put je čist ✅";
+                        statusBox.className = "status safe";
+                        distInfo.innerText = cameras.length > 0 ? `Najbliža kamera: ${Math.round(closestDist)}m` : "Unesite kamere...";
+                    }
+                }, err => console.error(err), { enableHighAccuracy: true });
+            }
+        }
+
+        // Pokreni aplikaciju
+        updateCameraDisplay();
+        watchLocation();
+        // Aktivacija audio konteksta (mora na klik zbog browser pravila)
+        document.body.addEventListener('click', () => { if(audioCtx.state === 'suspended') audioCtx.resume(); }, {once: true});
+    </script>
+</body>
+</html>
