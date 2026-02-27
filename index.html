@@ -6,72 +6,72 @@
     <title>Radar Detektor SRB</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; text-align: center; margin: 0; padding: 20px; }
-        .status { padding: 30px; border-radius: 15px; margin-bottom: 20px; font-size: 1.5rem; font-weight: bold; transition: 0.3s; }
-        .safe { background: #1b5e20; border: 2px solid #2ecc71; }
-        .danger { background: #b71c1c; border: 2px solid #e74c3c; animation: blink 0.6s infinite; }
+        .status { padding: 30px; border-radius: 15px; margin-bottom: 20px; font-size: 1.5rem; font-weight: bold; transition: 0.3s; border: 2px solid transparent; }
+        .safe { background: #1b5e20; border-color: #2ecc71; }
+        .danger { background: #b71c1c; border-color: #e74c3c; animation: blink 0.6s infinite; }
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
-        .info-panel { background: #1e1e1e; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
-        textarea { width: 90%; height: 80px; background: #2c2c2c; color: #fff; border: 1px solid #444; border-radius: 8px; padding: 10px; }
-        button { background: #2980b9; color: white; border: none; padding: 12px 25px; border-radius: 8px; font-size: 1rem; margin-top: 10px; cursor: pointer; }
-        .cam-list { font-size: 0.8rem; color: #888; margin-top: 20px; text-align: left; max-height: 150px; overflow-y: auto; padding: 10px; background: #000; }
+        .info-panel { background: #1e1e1e; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #333; }
+        #myPos { font-size: 0.7rem; color: #666; margin-top: 10px; }
+        textarea { width: 90%; height: 60px; background: #2c2c2c; color: #fff; border: 1px solid #444; border-radius: 8px; padding: 10px; }
+        button { background: #2980b9; color: white; border: none; padding: 12px 25px; border-radius: 8px; font-size: 1rem; margin-top: 10px; cursor: pointer; width: 90%; }
+        .cam-list { font-size: 0.8rem; color: #888; margin-top: 20px; text-align: left; max-height: 120px; overflow-y: auto; padding: 10px; background: #000; border-radius: 5px; }
     </style>
 </head>
-<body>
+<body onclick="startAudio()">
 
-    <div id="statusBox" class="status safe">Pokretanje sistema...</div>
+    <div id="statusBox" class="status safe">KLIKNI BILO GDE ZA START 🔊</div>
     
     <div class="info-panel">
-        <div id="distanceInfo">Tražim tvoju lokaciju...</div>
-        <div id="camName" style="font-size: 0.9rem; color: #aaa; margin-top: 5px;">-</div>
+        <div id="distanceInfo">Čekam GPS signal...</div>
+        <div id="camName" style="font-size: 1.1rem; color: #3498db; font-weight: bold; margin-top: 5px;">-</div>
+        <div id="myPos">Lat: 0 | Lon: 0</div>
     </div>
 
     <div style="font-size: 0.9rem; margin-bottom: 10px;">
-        Kamere u bazi: <span id="camCount" style="color: #3498db; font-weight: bold;">0</span>
+        Kamere u bazi: <span id="camCount">0</span>
     </div>
 
-    <textarea id="cameraInput" placeholder="Nalepi novi spisak ovde..."></textarea><br>
+    <textarea id="cameraInput" placeholder="Ime, Lat, Lon"></textarea><br>
     <button onclick="addCameras()">Dodaj u bazu</button>
 
     <div class="cam-list" id="cameraDisplay"></div>
 
     <script>
-        // BAZA OD 154 KAMERE (PRVIH 50 KLJUČNIH SA TVOG SPISKA)
         const defaultCameras = [
             { n: "Tošin Bunar - Heroja sa Košara", lat: 44.816118, lon: 20.394715 },
-			{ n: "Nehruova - Blok 62 (Japanska)", lat: 44.804771, lon: 20.376504 },
+            { n: "Nehruova - Blok 62 (Japanska)", lat: 44.804771, lon: 20.376504 }
         ];
 
         let stored = JSON.parse(localStorage.getItem('my_cams')) || [];
         let allCams = [...defaultCameras, ...stored];
 
-        let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let audioCtx = null;
 
-        function beep() {
+        function startAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            // Probni zvuk da potvrdiš da radi
+            beep(600, 100);
+        }
+
+        function beep(freq = 900, duration = 300) {
+            if (!audioCtx) return;
             let osc = audioCtx.createOscillator();
             let gain = audioCtx.createGain();
-            osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.frequency.value = 900; osc.start();
-            setTimeout(() => osc.stop(), 300);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = freq;
+            osc.start();
+            setTimeout(() => osc.stop(), duration);
         }
 
         function updateUI() {
             document.getElementById('camCount').innerText = allCams.length;
             document.getElementById('cameraDisplay').innerHTML = allCams.map(c => `• ${c.n}`).join('<br>');
-        }
-
-        function addCameras() {
-            const val = document.getElementById('cameraInput').value;
-            const lines = val.split('\n');
-            lines.forEach(l => {
-                const p = l.split(',');
-                if(p.length >= 3) {
-                    stored.push({ n: p[0].trim(), lat: parseFloat(p[p.length-2]), lon: parseFloat(p[p.length-1]) });
-                }
-            });
-            localStorage.setItem('my_cams', JSON.stringify(stored));
-            allCams = [...defaultCameras, ...stored];
-            updateUI();
-            alert("Baza ažurirana!");
         }
 
         function getDist(lat1, lon1, lat2, lon2) {
@@ -87,12 +87,18 @@
         navigator.geolocation.watchPosition(pos => {
             const myLat = pos.coords.latitude;
             const myLon = pos.coords.longitude;
+            
+            document.getElementById('myPos').innerText = `Tvoja lokacija: ${myLat.toFixed(6)}, ${myLon.toFixed(6)}`;
+
             let minDist = Infinity;
             let closestCam = "";
 
             allCams.forEach(c => {
                 let d = getDist(myLat, myLon, c.lat, c.lon);
-                if(d < minDist) { minDist = d; closestCam = c.n; }
+                if(d < minDist) { 
+                    minDist = d; 
+                    closestCam = c.n; 
+                }
             });
 
             const box = document.getElementById('statusBox');
@@ -102,17 +108,18 @@
             if(minDist < 400) {
                 box.innerText = "⚠️ RADAR BLIZU!";
                 box.className = "status danger";
-                beep();
+                beep(1200, 400); // Viši i jači ton
             } else {
                 box.innerText = "PUT JE ČIST ✅";
                 box.className = "status safe";
             }
-            info.innerText = `Najbliža kamera: ${Math.round(minDist)}m`;
+            info.innerText = `Udaljenost: ${Math.round(minDist)}m`;
             name.innerText = closestCam;
-        }, null, { enableHighAccuracy: true });
+        }, err => {
+            document.getElementById('distanceInfo').innerText = "Greška: Dozvoli GPS!";
+        }, { enableHighAccuracy: true });
 
         updateUI();
-        document.body.addEventListener('click', () => audioCtx.resume(), {once: true});
     </script>
 </body>
 </html>
