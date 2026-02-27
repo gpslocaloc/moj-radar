@@ -3,149 +3,206 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Radar Detektor SRB</title>
+    <title>Radar Detektor PRO</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; text-align: center; margin: 0; padding: 20px; }
-        .status { padding: 30px; border-radius: 15px; margin-bottom: 20px; font-size: 1.5rem; font-weight: bold; transition: 0.3s; border: 2px solid transparent; }
-        .safe { background: #1b5e20; border-color: #2ecc71; }
-        .danger { background: #b71c1c; border-color: #e74c3c; animation: blink 0.6s infinite; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
-        .info-panel { background: #1e1e1e; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #333; position: relative; }
-        #myPos { font-size: 0.7rem; color: #666; margin-top: 10px; }
+        :root { --bg: #0a0a0a; --panel: #1a1a1a; --blue: #2980b9; --red: #e74c3c; --green: #2ecc71; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; text-align: center; margin: 0; padding: 10px; }
         
-        /* Dugme za zvuk */
-        .mute-btn {
-            background: #444; color: white; border: none; padding: 10px; border-radius: 50%; 
-            cursor: pointer; font-size: 1.2rem; width: 45px; height: 45px; 
-            position: absolute; top: 10px; right: 10px;
+        /* Veliki Mute */
+        .mute-toggle {
+            position: fixed; top: 15px; left: 15px; width: 70px; height: 70px;
+            border-radius: 50%; border: none; font-size: 2rem; cursor: pointer;
+            z-index: 1000; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
-        .muted { background: #b71c1c; }
+        .mute-on { background: var(--panel); color: white; }
+        .mute-off { background: var(--red); color: white; animation: pulse 1.5s infinite; }
 
-        textarea { width: 90%; height: 60px; background: #2c2c2c; color: #fff; border: 1px solid #444; border-radius: 8px; padding: 10px; }
-        button.action-btn { background: #2980b9; color: white; border: none; padding: 12px 25px; border-radius: 8px; font-size: 1rem; margin-top: 10px; cursor: pointer; width: 90%; }
-        .cam-list { font-size: 0.8rem; color: #888; margin-top: 20px; text-align: left; max-height: 120px; overflow-y: auto; padding: 10px; background: #000; border-radius: 5px; }
+        .status { padding: 40px 20px; border-radius: 20px; margin: 60px 0 20px 0; font-size: 1.8rem; font-weight: bold; transition: 0.3s; border: 4px solid transparent; }
+        .safe { background: #1b5e20; border-color: var(--green); }
+        .danger { background: #7f0000; border-color: var(--red); animation: blink 0.5s infinite; }
+
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
+        .admin-box, .guest-box { background: var(--panel); padding: 15px; border-radius: 15px; margin-top: 15px; border: 1px solid #333; }
+        input, button { padding: 12px; margin: 5px; border-radius: 8px; border: none; font-size: 1rem; }
+        input { background: #333; color: white; width: 80%; }
+        button { background: var(--blue); color: white; cursor: pointer; font-weight: bold; }
+        .report-btn { background: #f39c12; width: 90%; font-size: 1.2rem; }
+        
+        .hidden { display: none; }
+        #logs { font-size: 0.8rem; color: #666; margin-top: 10px; }
     </style>
 </head>
-<body onclick="startAudio()">
+<body onclick="initAudio()">
 
-    <div id="statusBox" class="status safe">DODIRNI EKRAN ZA START 🔊</div>
-    
-    <div class="info-panel">
-        <button id="muteBtn" class="mute-btn" onclick="toggleMute(event)">🔊</button>
-        <div id="distanceInfo">Čekam GPS signal...</div>
-        <div id="camName" style="font-size: 1.1rem; color: #3498db; font-weight: bold; margin-top: 5px;">-</div>
-        <div id="myPos">Lat: 0 | Lon: 0</div>
+    <button id="muteBtn" class="mute-toggle mute-on" onclick="toggleMute(event)">🔊</button>
+
+    <div id="statusBox" class="status safe">DODIRNI EKRAN ZA START</div>
+
+    <div class="admin-box">
+        <div id="distText" style="font-size: 1.5rem;">Tražim lokaciju...</div>
+        <div id="camName" style="color: var(--blue); font-weight: bold;">-</div>
+        <div id="logs">GPS: Čekanje...</div>
     </div>
 
-    <div style="font-size: 0.9rem; margin-bottom: 10px;">
-        Kamere u bazi: <span id="camCount">0</span>
+    <div class="guest-box" id="guestUI">
+        <h3>Korisnički panel</h3>
+        <button class="report-btn" onclick="guestReport()">🚨 PRIJAVI KAMERU OVDE</button>
+        <p style="font-size: 0.8rem; color: #888;">Prijavićeš trenutne koordinate administratoru.</p>
+        <button onclick="showLogin()">Admin Login</button>
     </div>
 
-    <textarea id="cameraInput" placeholder="Ime, Lat, Lon"></textarea><br>
-    <button class="action-btn" onclick="addCameras()">Dodaj u bazu</button>
+    <div id="loginForm" class="admin-box hidden">
+        <h3>Admin Prijava</h3>
+        <input type="text" id="user" placeholder="Username"><br>
+        <input type="password" id="pass" placeholder="Password"><br>
+        <button onclick="login()">Prijavi se</button>
+        <button onclick="hideLogin()" style="background:#555">Nazad</button>
+    </div>
 
-    <div class="cam-list" id="cameraDisplay"></div>
+    <div id="adminUI" class="admin-box hidden">
+        <h3 style="color: var(--green);">Admin: UPRAVLJANJE</h3>
+        <div id="pendingReports" style="text-align: left; font-size: 0.9rem;"></div>
+        <hr>
+        <button onclick="logout()" style="background:#555">Odjavi se</button>
+    </div>
 
     <script>
+        // PODACI
         const defaultCameras = [
             { n: "Tošin Bunar - Heroja sa Košara", lat: 44.816118, lon: 20.394715 },
             { n: "Nehruova - Blok 62 (Japanska)", lat: 44.804771, lon: 20.376504 }
         ];
 
-        let stored = JSON.parse(localStorage.getItem('my_cams')) || [];
-        let allCams = [...defaultCameras, ...stored];
+        let myCams = JSON.parse(localStorage.getItem('my_cams')) || [];
+        let reports = JSON.parse(localStorage.getItem('pending_reports')) || [];
+        let allCams = [...defaultCameras, ...myCams];
+        
         let audioCtx = null;
         let isMuted = false;
+        let isAdmin = false;
+        let wakeLock = null;
 
-        function startAudio() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
+        // AUDIO & WAKE LOCK
+        async function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            // Pokušaj da zadržiš ekran upaljen
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) { console.log("WakeLock nije podržan"); }
         }
 
-        function toggleMute(event) {
-            event.stopPropagation(); // Sprečava da klik na dugme aktivira startAudio ponovo
+        function toggleMute(e) {
+            e.stopPropagation();
             isMuted = !isMuted;
-            const btn = document.getElementById('muteBtn');
-            btn.innerText = isMuted ? "🔇" : "🔊";
-            btn.classList.toggle('muted', isMuted);
+            document.getElementById('muteBtn').innerText = isMuted ? "🔇" : "🔊";
+            document.getElementById('muteBtn').className = isMuted ? "mute-toggle mute-off" : "mute-toggle mute-on";
         }
 
-        function beep(freq = 900, duration = 300) {
+        function beep(freq, dur) {
             if (!audioCtx || isMuted) return;
             let osc = audioCtx.createOscillator();
-            let gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.frequency.value = freq;
-            osc.start();
-            setTimeout(() => osc.stop(), duration);
+            let g = audioCtx.createGain();
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.frequency.value = freq; osc.start();
+            setTimeout(() => osc.stop(), dur);
         }
 
-        function updateUI() {
-            document.getElementById('camCount').innerText = allCams.length;
-            document.getElementById('cameraDisplay').innerHTML = allCams.map(c => `• ${c.n}`).join('<br>');
-        }
-
-        function getDist(lat1, lon1, lat2, lon2) {
-            const R = 6371000;
-            const dLat = (lat2-lat1) * Math.PI/180;
-            const dLon = (lon2-lon1) * Math.PI/180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                      Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
-                      Math.sin(dLon/2) * Math.sin(dLon/2);
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        }
+        // GPS LOGIKA
+        let currentPos = { lat: 0, lon: 0 };
 
         navigator.geolocation.watchPosition(pos => {
-            const myLat = pos.coords.latitude;
-            const myLon = pos.coords.longitude;
-            document.getElementById('myPos').innerText = `Tvoja lokacija: ${myLat.toFixed(6)}, ${myLon.toFixed(6)}`;
+            currentPos.lat = pos.coords.latitude;
+            currentPos.lon = pos.coords.longitude;
+            document.getElementById('logs').innerText = `GPS: ${currentPos.lat.toFixed(5)}, ${currentPos.lon.toFixed(5)}`;
 
             let minDist = Infinity;
-            let closestCam = "";
+            let closest = "-";
 
             allCams.forEach(c => {
-                let d = getDist(myLat, myLon, c.lat, c.lon);
-                if(d < minDist) { 
-                    minDist = d; 
-                    closestCam = c.n; 
-                }
+                let d = getDistance(currentPos.lat, currentPos.lon, c.lat, c.lon);
+                if (d < minDist) { minDist = d; closest = c.n; }
             });
 
             const box = document.getElementById('statusBox');
-            const info = document.getElementById('distanceInfo');
-            const name = document.getElementById('camName');
-
-            if(minDist < 400) {
-                box.innerText = "⚠️ RADAR BLIZU!";
+            if (minDist < 400) {
+                box.innerText = "🚨 RADAR BLIZU!";
                 box.className = "status danger";
-                if (!isMuted) beep(1200, 400);
+                beep(1000, 500);
             } else {
                 box.innerText = "PUT JE ČIST ✅";
                 box.className = "status safe";
             }
-            info.innerText = `Udaljenost: ${Math.round(minDist)}m`;
-            name.innerText = closestCam;
+            document.getElementById('distText').innerText = `${Math.round(minDist)}m`;
+            document.getElementById('camName').innerText = closest;
         }, null, { enableHighAccuracy: true });
 
-        function addCameras() {
-            const val = document.getElementById('cameraInput').value;
-            if(!val) return;
-            const p = val.split(',');
-            if(p.length >= 3) {
-                stored.push({ n: p[0].trim(), lat: parseFloat(p[1]), lon: parseFloat(p[2]) });
-                localStorage.setItem('my_cams', JSON.stringify(stored));
-                allCams = [...defaultCameras, ...stored];
-                updateUI();
-                alert("Dodato!");
-            }
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371000;
+            const dLat = (lat2-lat1) * Math.PI/180;
+            const dLon = (lon2-lon1) * Math.PI/180;
+            const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         }
 
-        updateUI();
+        // GOST / ADMIN FUNKCIJE
+        function guestReport() {
+            const name = prompt("Kratak opis lokacije:");
+            if (!name) return;
+            const rep = { n: name, lat: currentPos.lat, lon: currentPos.lon, id: Date.now() };
+            reports.push(rep);
+            localStorage.setItem('pending_reports', JSON.stringify(reports));
+            alert("Lokacija poslata adminu na proveru!");
+        }
+
+        function showLogin() { document.getElementById('guestUI').classList.add('hidden'); document.getElementById('loginForm').classList.remove('hidden'); }
+        function hideLogin() { document.getElementById('loginForm').classList.add('hidden'); document.getElementById('guestUI').classList.remove('hidden'); }
+
+        function login() {
+            const u = document.getElementById('user').value;
+            const p = document.getElementById('pass').value;
+            if (u === "admin" && p === "super@dm!n") {
+                isAdmin = true;
+                document.getElementById('loginForm').classList.add('hidden');
+                document.getElementById('adminUI').classList.remove('hidden');
+                renderReports();
+            } else { alert("Pogrešni podaci!"); }
+        }
+
+        function logout() { isAdmin = false; document.getElementById('adminUI').classList.add('hidden'); document.getElementById('guestUI').classList.remove('hidden'); }
+
+        function renderReports() {
+            const container = document.getElementById('pendingReports');
+            if (reports.length === 0) { container.innerHTML = "Nema novih prijava."; return; }
+            container.innerHTML = "<h4>Zahtevi za dodavanje:</h4>" + reports.map(r => `
+                <div style="border-bottom: 1px solid #444; padding: 5px;">
+                    ${r.n} (${r.lat.toFixed(4)}, ${r.lon.toFixed(4)})<br>
+                    <button onclick="approve(${r.id})" style="background:var(--green); padding:5px;">Odobri</button>
+                    <button onclick="deleteRep(${r.id})" style="background:var(--red); padding:5px;">Obriši</button>
+                </div>
+            `).join('');
+        }
+
+        function approve(id) {
+            const r = reports.find(x => x.id === id);
+            myCams.push({ n: r.n, lat: r.lat, lon: r.lon });
+            localStorage.setItem('my_cams', JSON.stringify(myCams));
+            allCams = [...defaultCameras, ...myCams];
+            deleteRep(id);
+            alert("Kamera dodata u zvaničnu bazu!");
+        }
+
+        function deleteRep(id) {
+            reports = reports.filter(x => x.id !== id);
+            localStorage.setItem('pending_reports', JSON.stringify(reports));
+            renderReports();
+        }
     </script>
 </body>
 </html>
